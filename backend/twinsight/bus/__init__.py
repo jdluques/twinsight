@@ -32,6 +32,7 @@ class StateChangeEvent:
     to_state: str
     guard: str
     ts: datetime
+    severity: str | None = None
 
 
 @dataclass

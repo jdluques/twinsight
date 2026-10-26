@@ -275,7 +275,7 @@ async def test_stm_transiciona_y_emite_evento():
     assert graph.element_severity["el1"] == "warning"  # Forzada -> warning
     assert len(emitted) == 1
     ev = emitted[0]
-    assert ev.from_state == "nominal" and ev.to_state == "forzada"
+    assert ev.from_state == "Nominal" and ev.to_state == "Forzada"
     assert ev.guard == "co2_ppm > 1000"
     assert len(persisted) == 1
     assert persisted[0]["origin_kind"] == "transition"

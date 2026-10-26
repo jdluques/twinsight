@@ -417,11 +417,12 @@ class Neo4jModelGraph(ModelGraph):
     ) -> dict | None:
         recs = await self._fetch(
             "MATCH (sm:StateMachine {project_id: $pid, origin_id: $mid})\n"
+            "OPTIONAL MATCH (owner:Element)-[:HAS_STM]->(sm)\n"
             "OPTIONAL MATCH (sm)-[:HAS_STATE]->(s:State)\n"
             "OPTIONAL MATCH (sm)-[:HAS_STATE]->(:State)<-[:FROM]-(t:Transition)\n"
             "OPTIONAL MATCH (t)-[:FROM]->(fs:State)\n"
             "OPTIONAL MATCH (t)-[:TO]->(ts:State)\n"
-            "RETURN sm,\n"
+            "RETURN sm, owner.origin_id AS element_id,\n"
             "  collect(DISTINCT s) AS states,\n"
             "  collect(DISTINCT {id: t.origin_id, guard_text: t.guard_text,"
             " guard_status: t.guard_status, from: fs.origin_id,"
@@ -432,6 +433,7 @@ class Neo4jModelGraph(ModelGraph):
             return None
         rec = recs[0]
         view = _node_view(rec["sm"])
+        view["element_id"] = rec["element_id"]
         view["states"] = [_node_view(s) for s in rec["states"] if s is not None]
         view["transitions"] = [t for t in rec["transitions"] if t.get("id")]
         return view
@@ -649,7 +651,7 @@ class Neo4jModelGraph(ModelGraph):
     ) -> None:
         await self._run(
             "MATCH (t:Transition {project_id: $pid, origin_id: $tid})\n"
-            "CALL { WITH t MATCH (t)-[r:GUARD_DEPENDS_ON]->() DELETE r }\n"
+            "CALL (t) { MATCH (t)-[r:GUARD_DEPENDS_ON]->() DELETE r }\n"
             "WITH t\n"
             "UNWIND $cids AS cid\n"
             "MATCH (c:Channel {project_id: $pid, channel_id: cid})\n"

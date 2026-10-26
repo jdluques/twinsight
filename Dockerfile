@@ -12,6 +12,7 @@ FROM python:3.12-slim AS backend
 RUN pip install --no-cache-dir uv
 WORKDIR /app
 COPY backend/ ./backend/
+COPY examples/ ./examples/
 COPY --from=frontend /fe/dist ./static
 WORKDIR /app/backend
 RUN uv sync

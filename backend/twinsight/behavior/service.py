@@ -57,6 +57,7 @@ class BehaviorService:
 
         self._ref_to_channel: dict[str, str] = {}
         self._channel_to_refs: dict[str, set[str]] = {}
+        self._channel_metric: dict[str, str] = {}
 
         self.interpreter: StateMachineInterpreter | None = None
         self.rules: RuleEngine | None = None
@@ -107,6 +108,82 @@ class BehaviorService:
                 self._channel_to_refs.setdefault(channel.id, set()).add(
                     channel.metric_key
                 )
+                self._channel_metric[channel.id] = channel.metric_key
+
+    async def _refine_channel_index(self, machines: list[dict]) -> None:
+        """Prioriza, por máquina, el canal mapeado a su elemento dueño.
+
+        Cuando varios canales comparten ``metric_key`` (p.ej. ``co2_ppm`` en
+        dos aulas), la guarda de una máquina debe resolver al canal de SU aula.
+        Se consulta el mapeo del elemento dueño (Apéndice D: la referencia se
+        resuelve por el bloque dueño) y se sobreescribe el índice global.
+        """
+        for machine in machines:
+            element_id = machine.get("element_id")
+            if not element_id:
+                continue
+            try:
+                res = await self.graph.resolve(self.project_id, element_id=element_id)
+            except Exception:  # noqa: BLE001 - resolución best-effort
+                continue
+            for ch in res.get("channels", []):
+                channel_id = ch.get("channel_id") or ch.get("id") if isinstance(ch, dict) else ch
+                metric = self._channel_metric.get(channel_id)
+                if metric:
+                    self._ref_to_channel[metric] = channel_id
+                    self._channel_to_refs.setdefault(channel_id, set()).add(metric)
+
+    async def _load_machines(self) -> list[dict]:
+        """Construye la forma rica que espera el intérprete a partir del grafo.
+
+        ``get_state_machines`` (plural) solo devuelve los nodos de máquina; aquí
+        se completa cada una con sus estados y transiciones (``get_state_machine``)
+        y se adaptan los nombres de campo (``origin_id``→``id``, ``guard_text``→
+        ``guard``). Además, si el estado inicial es un pseudoestado ``initial``, se
+        avanza por su transición sin guarda hasta el primer estado real (p.ej.
+        ``Nominal``), para que la máquina arranque en un estado operativo.
+        """
+        machines: list[dict] = []
+        for sm in await self.graph.get_state_machines(self.project_id):
+            mid = sm.get("origin_id") or sm.get("id")
+            full = await self.graph.get_state_machine(self.project_id, mid)
+            if not full:
+                continue
+            states = [
+                {"id": s.get("origin_id") or s.get("id"), "name": s.get("name"),
+                 "kind": s.get("kind")}
+                for s in full.get("states", [])
+            ]
+            transitions = [
+                {"id": t.get("id"), "from": t.get("from"), "to": t.get("to"),
+                 "guard": t.get("guard_text")}
+                for t in full.get("transitions", []) if t.get("id")
+            ]
+            active = full.get("active_state_id") or self._resolve_initial(states, transitions)
+            machines.append({
+                "id": mid,
+                "element_id": full.get("element_id"),
+                "active_state": active,
+                "states": states,
+                "transitions": transitions,
+            })
+        return machines
+
+    @staticmethod
+    def _resolve_initial(states: list[dict], transitions: list[dict]) -> str | None:
+        """Devuelve el estado inicial operativo (saltando el pseudoestado inicial)."""
+        initial = next(
+            (s["id"] for s in states
+             if str(s.get("kind", "")).lower() in ("initial", "inicial")),
+            None,
+        )
+        if initial is not None:
+            # Avanza por la transición sin guarda desde el pseudoestado inicial.
+            for t in transitions:
+                if t.get("from") == initial and not t.get("guard"):
+                    return t.get("to")
+            return initial
+        return states[0]["id"] if states else None
 
     async def _load_rules(self) -> list[dict]:
         async with self._sessionmaker() as session:
@@ -139,7 +216,8 @@ class BehaviorService:
             publish=self.bus.publish,
             persist=self._persist_event,
         )
-        machines = await self.graph.get_state_machines(self.project_id)
+        machines = await self._load_machines()
+        await self._refine_channel_index(machines)
         await self.interpreter.load(machines)
 
         self.rules = RuleEngine(

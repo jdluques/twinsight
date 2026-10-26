@@ -276,14 +276,19 @@ class StateMachineInterpreter:
             )
         payload["event_id"] = event_id
 
+        def _name(state_id: str | None) -> str:
+            s = machine.states.get(state_id) if state_id else None
+            return str(s.get("name")) if s and s.get("name") else (state_id or "")
+
         event = StateChangeEvent(
             project_id=self.project_id,
             machine_id=machine.id,
             element_id=machine.element_id or "",
-            from_state=old or "",
-            to_state=new,
+            from_state=_name(old),
+            to_state=_name(new),
             guard=tr.guard_text or "",
             ts=now,
+            severity=severity,
         )
         self.emitted.append(event)
         if self._publish is not None:
