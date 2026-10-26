@@ -8,6 +8,8 @@ Unifica en un solo lugar el modelo SysML, la representación física y la teleme
 en tiempo real — con mapeo tripartito, comportamiento model-driven y análisis de impacto.
 Una alternativa abierta a herramientas como G2/NPAS.
 
+![Workspace de TwinSight con la demo de dos aulas](docs/img/workspace.png)
+
 </div>
 
 ---
