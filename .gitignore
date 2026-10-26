@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.uv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Data / runtime
+data/
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
