@@ -159,16 +159,29 @@ async def seed_demo(sessionmaker, graph: ModelGraph) -> str | None:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("mapeo ventilación falló: %s", exc)
 
-    # 3c. Resto de sensores por convención (nombre del modelo ↔ forma ↔ canal).
-    svc = MappingService(graph)
-    all_channels = [{"id": cid, "topic_pattern": k[0] + "/" + k[1], "metric_key": k[2],
-                     "topic": f"gemelo/{k[0]}/{k[1]}", "metric": k[2]}
-                    for k, cid in channel_by_key.items()]
-    try:
-        suggestions = svc.suggest(pid, elements, visual_objects, all_channels)
-        await svc.confirm(pid, [s for s in suggestions if getattr(s, "confidence", "") == "alta"])
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("auto-mapeo por convención omitido: %s", exc)
+    # 3c. Resto de sensores (todos): elemento (por modelo) ↔ forma ↔ canal.
+    #     tipo_visual, clave_sensor, modelo_en_nombre, métrica principal
+    SENSOR_MAP = [
+        ("co2", "mhz19b", "MH-Z19B", "co2_ppm"),
+        ("temp", "bme280", "BME280", "temp_c"),
+        ("ruido", "inmp441", "INMP441", "spl_db"),
+        ("luz", "bh1750", "BH1750", "lux"),
+        ("ocupacion", "mlx90640", "MLX90640", "occupancy_est"),
+    ]
+    for aula, suffix in [("aula-A", "A"), ("aula-B", "B")]:
+        for vtype, skey, model, metric in SENSOR_MAP:
+            if vtype == "co2" and suffix == "A":
+                continue  # ya mapeado explícitamente en 3a
+            elem = next((e for e in elements
+                         if model in str(e.get("name", "")) and f"Aula {suffix}" in str(e.get("name", ""))), None)
+            vis = visual_id(f"sensor-{vtype}-aula{suffix}")
+            ch = channel_by_key.get((aula, skey, metric))
+            if elem and (vis or ch):
+                try:
+                    await graph.create_mapping(pid, element_id=elem["origin_id"],
+                                               visual_object_id=vis, channel_id=ch)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("mapeo %s/%s falló: %s", aula, vtype, exc)
 
     # 4. Regla, presentación y layout por defecto.
     async with sessionmaker() as session:

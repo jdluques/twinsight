@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; margin: 0; }
+body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+/* Resaltado cruzado: pulso suave para los elementos "calientes". */
+@keyframes tw-pulse { 0%,100% { opacity: 1 } 50% { opacity: .55 } }
+.tw-hot { animation: tw-pulse 1.2s ease-in-out infinite; }
