@@ -1,0 +1,58 @@
+# Entorno de DEMO de TwinSight (NO es el despliegue de producción).
+# Levanta un broker Mosquitto de juguete + Neo4j + el backend + un simulador
+# que publica telemetría de dos aulas. El proyecto demo se siembra al arrancar.
+#
+#   docker compose -f docker-compose.demo.yml up --build
+#   → abrir http://localhost:8000  (clave de editor: editor-demo)
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    command: >
+      sh -c "printf 'listener 1883 0.0.0.0\nallow_anonymous true\n' > /mosquitto/config/mosquitto.conf
+      && exec mosquitto -c /mosquitto/config/mosquitto.conf"
+    ports:
+      - "1883:1883"
+
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/twinsight
+      NEO4J_server_memory_heap_max__size: 512m
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  twinsight:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      TWINSIGHT_NEO4J_URI: bolt://neo4j:7687
+      TWINSIGHT_NEO4J_PASSWORD: twinsight
+      TWINSIGHT_DATABASE_URL: sqlite+aiosqlite:////data/twinsight.sqlite3
+      TWINSIGHT_MQTT_HOST: mosquitto
+      TWINSIGHT_MQTT_PORT: "1883"
+      TWINSIGHT_SEED_DEMO: "1"  # siembra el proyecto "Aulas PI3" al arrancar
+    ports:
+      - "8000:8000"
+    volumes:
+      - demo-data:/data
+
+  simulator:
+    build:
+      context: .
+      dockerfile: simulator/Dockerfile
+    depends_on:
+      - mosquitto
+    command: ["--host", "mosquitto", "--port", "1883", "--interval", "2", "--scenario", "co2"]
+
+volumes:
+  demo-data:

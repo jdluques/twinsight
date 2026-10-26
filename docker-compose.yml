@@ -1,0 +1,42 @@
+# Despliegue de referencia de TwinSight (sin broker — el broker MQTT es
+# infraestructura externa; ver docker-compose.demo.yml para un entorno de demo).
+services:
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/twinsight
+      NEO4J_server_memory_heap_max__size: 512m
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  twinsight:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      TWINSIGHT_NEO4J_URI: bolt://neo4j:7687
+      TWINSIGHT_NEO4J_USER: neo4j
+      TWINSIGHT_NEO4J_PASSWORD: twinsight
+      TWINSIGHT_DATABASE_URL: sqlite+aiosqlite:////data/twinsight.sqlite3
+      # El broker MQTT es externo: configúralo según tu entorno.
+      TWINSIGHT_MQTT_HOST: ${TWINSIGHT_MQTT_HOST:-localhost}
+      TWINSIGHT_MQTT_PORT: ${TWINSIGHT_MQTT_PORT:-1883}
+    ports:
+      - "8000:8000"
+    volumes:
+      - twinsight-data:/data
+
+volumes:
+  neo4j-data:
+  twinsight-data:
